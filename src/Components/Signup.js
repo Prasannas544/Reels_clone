@@ -8,11 +8,12 @@ import { makeStyles } from '@mui/styles';
 import Alert from '@mui/material/Alert';
 import TextField from '@mui/material/TextField';
 import CloudUploadIcon from '@material-ui/icons/CloudUpload'
-import {Link} from 'react-router-dom';
-
-
+import {Link, useHistory} from 'react-router-dom';
+import { useState,useContext } from 'react';
+import { AuthContext } from '../Context/AuthContext';
 import './Signup.css'
 import insta from '../Assets/Instagram.JPG'
+import { database ,storage} from '../firebase';
 
 export default function Signup() {
     const useStyles = makeStyles({
@@ -26,7 +27,66 @@ export default function Signup() {
         },
     })
     const classes=useStyles();
-  return (
+    const [email,setEmail] = useState('');
+    const [password,setPassword] = useState('');
+    const [name,setName] = useState('');
+    const [file,setFile] = useState(null);
+    const [error,setError] = useState('');
+    const [loading,setLoading] = useState(false);
+    const history = useHistory();
+    const {signup}=useContext(AuthContext);
+
+    const handleClick = async() =>{
+        if(file==null){
+            setError("Please upload profile image first");
+            setTimeout(()=>{
+                setError('');
+            },3000)
+            return;
+        }
+        try{
+            setError('');
+            setLoading(true);
+            let userObj = await signup(email,password)
+            let uid=userObj.user.uid;
+            
+            const uploadTask = storage.ref(`/users/${uid}/${file.name}`).put(file);
+            uploadTask.on('state_changed',fn1,fn2,fn3);
+            function fn1(snapshot){
+                let progress = (snapshot.bytesTransferred/snapshot.totalBytes)*100;
+                console.log(`Upload is ${progress} done.`);
+            }
+            function fn2(error){
+                setError("Please upload profile image first");
+                setTimeout(()=>{
+                    setError('');
+                },3000)
+                setLoading(false);
+                return;
+            }
+            function fn3(){
+                uploadTask.snapshot.ref.getDownloadURL().then((url)=>{
+                   console.log(url);
+                    database.users.doc(uid).set({
+                        email:email,
+                        userId:uid,
+                        fullname:name,
+                        profileUrl:url,
+                        createdAt:database.getTimeStamp()
+                    })
+                    setLoading(false);
+                    history.push('/');
+                })
+            }
+
+        }catch(err){
+            setError(err);
+            setTimeout(()=>{
+                setError('');
+            },3000)
+    }
+    }
+    return (
     <div className='signupWrapper'>
         <div className='signupCard'>
                 <Card variant='outlined'>
@@ -37,20 +97,20 @@ export default function Signup() {
                     <Typography className={classes.text1} variant="subtitle1" >
                        Signup to see photos and videos from your buddies
                     </Typography>
-                    {true && <Alert severity="error">This is an error alert — check it out!</Alert>}
-                    <TextField id="outlined-basic" label="Email" variant="outlined" fullWidth={true} margin="dense" size="small"/>
+                    {error!='' && <Alert severity="error">{error}</Alert>}
+                    <TextField id="outlined-basic" label="Email" variant="outlined" fullWidth={true} margin="dense" size="small" value={email} onChange={(e)=>setEmail(e.target.value)}/>
                     
-                    <TextField id="outlined-basic" label="Password" variant="outlined" fullWidth={true} margin="dense" size="small"/>
+                    <TextField id="outlined-basic" label="Password" variant="outlined" fullWidth={true} margin="dense" size="small" value={password} onChange={(e)=>setPassword(e.target.value)}/>
                     
-                    <TextField id="outlined-basic" label="Full Name" variant="outlined" fullWidth={true} margin="dense" size="small"/>
+                    <TextField id="outlined-basic" label="Full Name" variant="outlined" fullWidth={true} margin="dense" size="small" value={name} onChange={(e)=>setName(e.target.value)}/>
                    <Button size="small" color='secondary' variant="outlined" fullWidth={true} margin="dense" startIcon={<CloudUploadIcon/>} component="label">
                     Upload Profile Picture
-                    <input type="file" accept='image/*'hidden/>
+                    <input type="file" accept='image/*'hidden onChange={(e)=>setFile(e.target.files[0])}/>
                    </Button>
                     </CardContent>
                 
                     <CardActions>
-                    <Button  color="primary" fullWidth={true} variant="contained">
+                    <Button  color="primary" fullWidth={true} variant="contained" disabled={loading} onClick={handleClick}>
                     Sign Up
                     </Button>
                     </CardActions>
@@ -72,6 +132,5 @@ export default function Signup() {
         </div>
     </div>
 
-   
-  );
-}
+    );
+    }
